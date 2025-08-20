@@ -1,12 +1,14 @@
 import axios from 'axios';
 
 // Create an axios instance with default configuration
+// In production, this will use the Vercel proxy
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const api = axios.create({
-  baseURL: `${API_URL}/api`,
+  baseURL: `${API_URL}/api`, // This will be your Vercel URL in production
   headers: {
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
   },
   withCredentials: true
 });
