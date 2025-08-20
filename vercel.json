@@ -6,6 +6,10 @@
   ],
   "routes": [
     {
+      "src": "/assets/(.*)",
+      "dest": "/assets/$1"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "/api/[...path]"
     },
@@ -16,6 +20,11 @@
   ],
   "env": {
     "BACKEND_API_URL": "https://voodo-api.zoomerrangz.com"
-  }
+  },
+  "rewrites": [
+    { "source": "/assets/(.*)", "destination": "/assets/$1" },
+    { "source": "/api/(.*)", "destination": "/api/[...path]" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }
   

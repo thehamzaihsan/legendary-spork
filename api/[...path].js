@@ -14,7 +14,22 @@ const enableCors = (res) => {
   return res;
 };
 
+// Skip static assets and other non-API routes
+const shouldSkipProxy = (path) => {
+  const skipPaths = ['/_next', '/assets', '/favicon.ico', '/manifest.json'];
+  return skipPaths.some(skipPath => path.startsWith(skipPath));
+};
+
 export default async function handler(req, res) {
+  const { path: pathParam } = req.query;
+  const pathStr = Array.isArray(pathParam) ? pathParam.join('/') : pathParam || '';
+  
+  // Skip static assets and non-API routes
+  if (shouldSkipProxy(`/${pathStr}`)) {
+    console.log('Skipping proxy for path:', pathStr);
+    return res.status(404).end();
+  }
+
   // Handle OPTIONS method for CORS preflight
   if (req.method === 'OPTIONS') {
     enableCors(res);
@@ -24,7 +39,6 @@ export default async function handler(req, res) {
   // Enable CORS for all requests
   enableCors(res);
 
-  const { path } = req.query;
   const apiUrl = process.env.BACKEND_API_URL || 'https://voodo-api.zoomerrangz.com';
   
   if (!apiUrl) {
@@ -33,9 +47,9 @@ export default async function handler(req, res) {
   }
   
   // Construct the full URL to the backend API
-  const pathStr = Array.isArray(path) ? path.join('/') : path || '';
+  const fullPath = Array.isArray(pathParam) ? pathParam.join('/') : pathParam || '';
   const queryString = req.url.includes('?') ? `?${req.url.split('?')[1]}` : '';
-  const url = `${apiUrl.replace(/\/$/, '')}/api/${pathStr}${queryString}`;
+  const url = `${apiUrl.replace(/\/$/, '')}/api/${fullPath}${queryString}`;
   
   console.log('Proxying request to:', url);
 
