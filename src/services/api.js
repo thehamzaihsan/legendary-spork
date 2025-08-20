@@ -2,14 +2,15 @@ import axios from 'axios';
 
 // Create an axios instance with default configuration
 const isProduction = import.meta.env.PROD;
-const API_URL = isProduction 
-  ? window.location.origin // Use relative URL in production (Vercel proxy)
-  : import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
-console.log('API URL:', API_URL);
+// In production, we use a relative path to ensure requests go to the Vercel proxy.
+// In development, we use the .env variable.
+const baseURL = isProduction ? '/api' : `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api`;
+
+console.log('API Base URL:', baseURL);
 
 const api = axios.create({
-  baseURL: `${API_URL}${isProduction ? '/api' : '/api'}`,
+  baseURL: baseURL,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
