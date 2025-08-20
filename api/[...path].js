@@ -5,21 +5,26 @@
 import fetch from 'node-fetch';
 
 export default async function handler(req, res) {
+  // Set CORS headers
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-V, Authorization'
+  );
+
+  // Handle OPTIONS method for CORS preflight
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
   const { path } = req.query;
-  
-  // Get the backend URL from Vercel's environment variables
-  // Make sure to add BACKEND_API_URL in your Vercel project settings
   const apiUrl = process.env.BACKEND_API_URL;
   
-  // Construct the full URL to the backend API
-  const url = `${apiUrl}/api/${Array.isArray(path) ? path.join('/') : path}${
-    req.url.includes('?') ? `?${req.url.split('?')[1]}` : ''
-  }`;path.js
-// This serverless function proxies all API requests to your backend
-
-export default async function handler(req, res) {
-  const { path } = req.query;
-  const apiUrl = process.env.BACKEND_API_URL ;
+  if (!apiUrl) {
+    return res.status(500).json({ error: 'BACKEND_API_URL is not configured' });
+  }
   
   // Construct the full URL to the backend API
   const url = `${apiUrl}/api/${Array.isArray(path) ? path.join('/') : path}${
@@ -28,15 +33,25 @@ export default async function handler(req, res) {
 
   try {
     // Forward the request to the backend
-    const response = await fetch(url, {
+    const headers = { ...req.headers };
+    // Remove headers that could cause issues
+    delete headers.host;
+    delete headers.origin;
+    delete headers.referer;
+
+    const fetchOptions = {
       method: req.method,
       headers: {
-        ...req.headers,
-        // Don't forward host header to avoid CORS issues
-        host: undefined,
+        'Content-Type': 'application/json',
+        ...headers
       },
-      ...(req.method !== 'GET' && req.method !== 'HEAD' && { body: JSON.stringify(req.body) }),
-    });
+      credentials: 'include',
+      ...(req.method !== 'GET' && req.method !== 'HEAD' && req.body && { 
+        body: JSON.stringify(req.body) 
+      }),
+    };
+
+    const response = await fetch(url, fetchOptions);
 
     // Get the response body
     const body = await response.text();
@@ -45,9 +60,18 @@ export default async function handler(req, res) {
     res.status(response.status);
 
     // Forward response headers
+    const responseHeaders = {};
     response.headers.forEach((value, key) => {
-      res.setHeader(key, value);
+      // Don't forward content-encoding header as it can cause issues
+      if (key.toLowerCase() !== 'content-encoding') {
+        responseHeaders[key] = value;
+        res.setHeader(key, value);
+      }
     });
+
+    // Ensure CORS headers are set in the response
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
 
     // Send response body
     res.send(body);
