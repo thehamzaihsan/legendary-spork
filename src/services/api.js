@@ -1,17 +1,69 @@
 import axios from 'axios';
 
 // Create an axios instance with default configuration
-// In production, this will use the Vercel proxy
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const isProduction = import.meta.env.PROD;
+const API_URL = isProduction 
+  ? window.location.origin // Use relative URL in production (Vercel proxy)
+  : import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+console.log('API URL:', API_URL);
 
 const api = axios.create({
-  baseURL: `${API_URL}/api`, // This will be your Vercel URL in production
+  baseURL: `${API_URL}${isProduction ? '/api' : '/api'}`,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
-  withCredentials: true
+  withCredentials: true,
+  withXSRFToken: true,
+  xsrfCookieName: 'XSRF-TOKEN',
+  xsrfHeaderName: 'X-XSRF-TOKEN',
 });
+
+// Add request interceptor
+api.interceptors.request.use(
+  (config) => {
+    // Add auth token if exists
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Add response interceptor
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response) {
+      // Handle specific status codes
+      if (error.response.status === 401) {
+        // Handle unauthorized
+        console.error('Unauthorized access - please log in');
+      } else if (error.response.status === 403) {
+        // Handle forbidden
+        console.error('You do not have permission to perform this action');
+      } else if (error.response.status === 404) {
+        // Handle not found
+        console.error('The requested resource was not found');
+      } else if (error.response.status >= 500) {
+        // Handle server errors
+        console.error('Server error occurred');
+      }
+    } else if (error.request) {
+      // The request was made but no response was received
+      console.error('No response from server');
+    } else {
+      // Something happened in setting up the request
+      console.error('Request error:', error.message);
+    }
+    return Promise.reject(error);
+  }
+);
 
 // Hangouts API
 export const hangoutsApi = {

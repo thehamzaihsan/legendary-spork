@@ -1,80 +1,89 @@
 // api/[...path].js
-// This serverless function proxies all API requests to your backend using Vercel's environment variables
-
-// Import the node-fetch module for Node.js environments
+// This serverless function proxies all API requests to your backend
 import fetch from 'node-fetch';
 
-export default async function handler(req, res) {
-  // Set CORS headers
+// Enable CORS headers
+const enableCors = (res) => {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
   res.setHeader(
     'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-V, Authorization'
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization'
   );
+  return res;
+};
 
+export default async function handler(req, res) {
   // Handle OPTIONS method for CORS preflight
   if (req.method === 'OPTIONS') {
+    enableCors(res);
     return res.status(200).end();
   }
+  
+  // Enable CORS for all requests
+  enableCors(res);
 
   const { path } = req.query;
-  const apiUrl = process.env.BACKEND_API_URL;
+  const apiUrl = process.env.BACKEND_API_URL || 'https://voodo-api.zoomerrangz.com';
   
   if (!apiUrl) {
-    return res.status(500).json({ error: 'BACKEND_API_URL is not configured' });
+    console.error('BACKEND_API_URL is not configured');
+    return res.status(500).json({ error: 'Backend URL is not configured' });
   }
   
   // Construct the full URL to the backend API
-  const url = `${apiUrl}/api/${Array.isArray(path) ? path.join('/') : path}${
-    req.url.includes('?') ? `?${req.url.split('?')[1]}` : ''
-  }`;
+  const pathStr = Array.isArray(path) ? path.join('/') : path || '';
+  const queryString = req.url.includes('?') ? `?${req.url.split('?')[1]}` : '';
+  const url = `${apiUrl.replace(/\/$/, '')}/api/${pathStr}${queryString}`;
+  
+  console.log('Proxying request to:', url);
 
   try {
-    // Forward the request to the backend
-    const headers = { ...req.headers };
-    // Remove headers that could cause issues
-    delete headers.host;
-    delete headers.origin;
-    delete headers.referer;
-
-    const fetchOptions = {
-      method: req.method,
-      headers: {
-        'Content-Type': 'application/json',
-        ...headers
-      },
-      credentials: 'include',
-      ...(req.method !== 'GET' && req.method !== 'HEAD' && req.body && { 
-        body: JSON.stringify(req.body) 
-      }),
+    // Prepare headers
+    const headers = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      ...(req.headers.authorization && { 'Authorization': req.headers.authorization }),
     };
 
-    const response = await fetch(url, fetchOptions);
+    // Prepare fetch options
+    const fetchOptions = {
+      method: req.method,
+      headers,
+      redirect: 'follow',
+      ...(req.method !== 'GET' && req.body && { body: JSON.stringify(req.body) }),
+    };
+    
+    console.log('Request headers:', JSON.stringify(headers, null, 2));
 
-    // Get the response body
-    const body = await response.text();
-
-    // Set response status code
-    res.status(response.status);
-
-    // Forward response headers
-    const responseHeaders = {};
-    response.headers.forEach((value, key) => {
-      // Don't forward content-encoding header as it can cause issues
-      if (key.toLowerCase() !== 'content-encoding') {
-        responseHeaders[key] = value;
-        res.setHeader(key, value);
-      }
+    console.log('Sending request with options:', {
+      method: fetchOptions.method,
+      headers: fetchOptions.headers,
+      hasBody: !!fetchOptions.body
     });
 
-    // Ensure CORS headers are set in the response
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-
-    // Send response body
-    res.send(body);
+    const response = await fetch(url, fetchOptions);
+    const contentType = response.headers.get('content-type');
+    const isJson = contentType && contentType.includes('application/json');
+    
+    // Get the response body
+    const body = isJson ? await response.json() : await response.text();
+    
+    console.log('Response status:', response.status);
+    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+    
+    // Set CORS headers
+    enableCors(res);
+    
+    // Set content type based on response
+    if (contentType) {
+      res.setHeader('Content-Type', contentType);
+    }
+    
+    // Send the response
+    res.status(response.status);
+    res.send(isJson ? JSON.stringify(body) : body);
   } catch (error) {
     console.error('API proxy error:', error);
     res.status(500).json({ 
